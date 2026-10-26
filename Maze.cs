@@ -6,18 +6,12 @@ public partial class Maze : Node2D
 {
     const int Tile = 48;
 
-    string[] map =
-    {
-        "####################",
-        "#P   #   r   #  b  #",
-        "# ## #Y####### ###R#",
-        "# #    #   #   #   #",
-        "# # #### # ##### # #",
-        "# #  y   #       #B#",
-        "# ######## ####### #",
-        "#          #   S  D#",
-        "####################",
-    };
+    // static: sobrevivem quando a cena reinicia (tecla R ou próxima fase)
+    static int level = 1;
+    static double totalTime = 0;
+
+    string[] map;
+    int totalLevels = 0;
 
     Dictionary<char, Color> keyColors = new()
     {
@@ -44,6 +38,19 @@ public partial class Maze : Node2D
 
     public override void _Ready()
     {
+        // Conta quantas fases existem na pasta maps (fase1.txt, fase2.txt, ...)
+        while (Godot.FileAccess.FileExists($"res://maps/fase{totalLevels + 1}.txt"))
+        {
+            totalLevels++;
+        }
+
+        map = LoadMap(level);
+        if (map == null) return;
+
+		int cols = map.Max(l => l.Length);
+		var mapSize = new Vector2(cols * Tile, map.Length * Tile);
+		Position = ((GetViewportRect().Size - mapSize) / 2).Floor();
+
         for (int y = 0; y < map.Length; y++)
         {
             for (int x = 0; x < map[y].Length; x++)
@@ -57,8 +64,7 @@ public partial class Maze : Node2D
                 }
                 else if (c == 'P')
                 {
-                    GetNode<Node2D>("../Player").Position = pos;
-                }
+					GetNode<Node2D>("../Player").GlobalPosition = ToGlobal(pos);                }
                 else if (keyColors.ContainsKey(c))
                 {
                     CreateKey(pos, c);
@@ -93,7 +99,11 @@ public partial class Maze : Node2D
         timerLabel.AddThemeFontSizeOverride("font_size", 24);
         layer.AddChild(timerLabel);
 
-        var hint = new Label { Position = new Vector2(980, 45), Text = "R: reiniciar" };
+        var hint = new Label
+        {
+            Position = new Vector2(980, 45),
+            Text = $"Fase {level}/{totalLevels}\nR: reiniciar"
+        };
         hint.AddThemeFontSizeOverride("font_size", 20);
         layer.AddChild(hint);
 
@@ -101,9 +111,26 @@ public partial class Maze : Node2D
         UpdateLabel();
     }
 
+    string[] LoadMap(int n)
+    {
+        using var file = Godot.FileAccess.Open($"res://maps/fase{n}.txt", Godot.FileAccess.ModeFlags.Read);
+
+        if (file == null)
+        {
+            GD.PrintErr($"Não achei o mapa da fase {n} (res://maps/fase{n}.txt)");
+            return null;
+        }
+
+        return file.GetAsText()
+            .Split('\n')
+            .Select(l => l.TrimEnd('\r'))
+            .Where(l => l.Length > 0)
+            .ToArray();
+    }
+
     public override void _Process(double delta)
     {
-        if (finished) return;
+        if (finished || timerLabel == null) return;
 
         elapsed += delta;
         timerLabel.Text = FormatTime(elapsed);
@@ -111,9 +138,27 @@ public partial class Maze : Node2D
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (@event is InputEventKey key && key.Pressed && !key.Echo && key.Keycode == Key.R)
+        if (@event is InputEventKey key && key.Pressed && !key.Echo)
         {
-            GetTree().ReloadCurrentScene();
+            if (key.Keycode == Key.R)
+            {
+                GetTree().ReloadCurrentScene();
+            }
+            else if (finished && (key.Keycode == Key.Enter || key.Keycode == Key.KpEnter))
+            {
+                if (level < totalLevels)
+                {
+                    totalTime += elapsed;
+                    level++;
+                }
+                else
+                {
+                    level = 1;
+                    totalTime = 0;
+                }
+
+                GetTree().ReloadCurrentScene();
+            }
         }
     }
 
@@ -267,7 +312,16 @@ public partial class Maze : Node2D
             if (body is Player player)
             {
                 finished = true;
-                msg.Text = $"Você escapou em {FormatTime(elapsed)}! Aperte R para jogar de novo.";
+
+                if (level < totalLevels)
+                {
+                    msg.Text = $"Fase {level} completa em {FormatTime(elapsed)}! ENTER: próxima fase";
+                }
+                else
+                {
+                    msg.Text = $"Você terminou o jogo! Tempo total: {FormatTime(totalTime + elapsed)}. ENTER: jogar de novo";
+                }
+
                 player.SetPhysicsProcess(false);
             }
         };
