@@ -7,9 +7,8 @@ public partial class Maze : Node2D
     const int Tile = 48;
 
     // static: sobrevivem quando a cena reinicia (tecla R ou próxima fase)
-    static int level = 1;
-    static double totalTime = 0;
-
+public static int level = 1;
+public static double totalTime = 0;
     string[] map;
     int totalLevels = 0;
 
@@ -38,7 +37,7 @@ public partial class Maze : Node2D
 
     public override void _Ready()
     {
-        // Conta quantas fases existem na pasta maps (fase1.txt, fase2.txt, ...)
+        // Conta quantas fases existem na pasta maps
         while (Godot.FileAccess.FileExists($"res://maps/fase{totalLevels + 1}.txt"))
         {
             totalLevels++;
@@ -108,6 +107,7 @@ public partial class Maze : Node2D
         layer.AddChild(hint);
 
         AddChild(layer);
+		AddChild(new PauseMenu());
         UpdateLabel();
     }
 
