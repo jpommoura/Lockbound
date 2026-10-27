@@ -14,9 +14,9 @@ public static double totalTime = 0;
 
     Dictionary<char, Color> keyColors = new()
     {
-        ['y'] = new Color(1f, 0.85f, 0.1f),
-        ['r'] = new Color(0.9f, 0.2f, 0.2f),
-        ['b'] = new Color(0.2f, 0.5f, 1f),
+        ['y'] = new Color(0.89f, 0.74f, 0.28f),
+        ['r'] = new Color(0.80f, 0.31f, 0.29f),
+        ['b'] = new Color(0.35f, 0.50f, 0.82f),
     };
 
     Dictionary<char, string> keyNames = new()
@@ -174,6 +174,18 @@ public static double totalTime = 0;
         return $"{min:00}:{sec:00.0}";
     }
 
+    Sprite2D MakeSprite(string file)
+    {
+        return new Sprite2D
+        {
+            Texture = GD.Load<Texture2D>($"res://art/{file}"),
+            TextureFilter = CanvasItem.TextureFilterEnum.Nearest
+        };
+    }
+
+    // número "aleatório" fixo por posição (a fase fica igual toda vez)
+    int Hash(int x, int y) => Mathf.Abs(x * 73 + y * 151 + x * y * 7);
+
     void CreateWall(Vector2 pos)
     {
         var body = new StaticBody2D { Position = pos };
@@ -183,12 +195,7 @@ public static double totalTime = 0;
             Shape = new RectangleShape2D { Size = new Vector2(Tile, Tile) }
         };
 
-        var visual = new ColorRect
-        {
-            Size = new Vector2(Tile, Tile),
-            Position = new Vector2(-Tile / 2, -Tile / 2),
-            Color = new Color(0.28f, 0.30f, 0.38f)
-        };
+        var visual = MakeSprite($"environment/wall_{Hash((int)(pos.X / Tile), (int)(pos.Y / Tile)) % 3 + 1}.png");
 
         body.AddChild(shape);
         body.AddChild(visual);
@@ -204,12 +211,8 @@ public static double totalTime = 0;
             Shape = new CircleShape2D { Radius = 12 }
         };
 
-        var visual = new ColorRect
-        {
-            Size = new Vector2(20, 20),
-            Position = new Vector2(-10, -10),
-            Color = keyColors[type]
-        };
+        var visual = MakeSprite("items/key.png");
+        visual.Modulate = keyColors[type];
 
         area.AddChild(shape);
         area.AddChild(visual);
@@ -231,7 +234,6 @@ public static double totalTime = 0;
     void CreateDoor(Vector2 pos, char type)
     {
         bool isFinal = type == 'd';
-        Color color = isFinal ? new Color(0.6f, 0.4f, 0.9f) : keyColors[type];
 
         var door = new StaticBody2D { Position = pos };
 
@@ -240,12 +242,8 @@ public static double totalTime = 0;
             Shape = new RectangleShape2D { Size = new Vector2(Tile, Tile) }
         };
 
-        var visual = new ColorRect
-        {
-            Size = new Vector2(Tile, Tile),
-            Position = new Vector2(-Tile / 2, -Tile / 2),
-            Color = color
-        };
+        string doorFile = type switch { 'y' => "yellow", 'r' => "red", 'b' => "blue", _ => "final" };
+        var visual = MakeSprite($"items/door_{doorFile}.png");
 
         door.AddChild(shape);
         door.AddChild(visual);
@@ -305,12 +303,7 @@ public static double totalTime = 0;
             Shape = new RectangleShape2D { Size = new Vector2(30, 30) }
         });
 
-        area.AddChild(new ColorRect
-        {
-            Size = new Vector2(30, 30),
-            Position = new Vector2(-15, -15),
-            Color = new Color(0.2f, 0.8f, 0.4f)
-        });
+        area.AddChild(MakeSprite("environment/exit.png"));
 
         area.BodyEntered += (body) =>
         {
@@ -374,12 +367,7 @@ public static double totalTime = 0;
             Shape = new CircleShape2D { Radius = 14 }
         });
 
-        area.AddChild(new ColorRect
-        {
-            Size = new Vector2(18, 26),
-            Position = new Vector2(-9, -13),
-            Color = new Color(1f, 0.6f, 0.15f)
-        });
+        area.AddChild(MakeSprite("items/lantern.png"));
 
         // Brilho para dar para ver a lanterna um pouco de longe no escuro
         area.AddChild(new PointLight2D
@@ -424,14 +412,17 @@ public static double totalTime = 0;
             MouseFilter = Control.MouseFilterEnum.Ignore
         });
 
-        // Chão do labirinto
-        AddChild(new ColorRect
-        {
-            Size = mapSize,
-            Color = new Color(0.50f, 0.51f, 0.56f),
-            ZIndex = -1,
-            MouseFilter = Control.MouseFilterEnum.Ignore
-        });
+        // Chão do labirinto (uma lajota por quadrado)
+        for (int y = 0; y < map.Length; y++)
+            for (int x = 0; x < map[y].Length; x++)
+            {
+                if (map[y][x] == '#') continue;
+                int h = Hash(x, y) % 5;
+                var f = MakeSprite($"environment/floor_{(h == 0 ? 2 : h == 1 ? 3 : 1)}.png");
+                f.Position = new Vector2(x * Tile + Tile / 2, y * Tile + Tile / 2);
+                f.ZIndex = -1;
+                AddChild(f);
+            }
     }
 
     void UpdateLabel()
