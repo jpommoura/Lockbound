@@ -35,6 +35,10 @@ public static double totalTime = 0;
     double elapsed = 0;
     bool finished = false;
 
+	CanvasModulate darkness;
+    PointLight2D playerLight;
+    const float LightRadius = Tile * 2f;   // alcance do círculo de visão
+
     public override void _Ready()
     {
         // Conta quantas fases existem na pasta maps
@@ -49,6 +53,8 @@ public static double totalTime = 0;
 		int cols = map.Max(l => l.Length);
 		var mapSize = new Vector2(cols * Tile, map.Length * Tile);
 		Position = ((GetViewportRect().Size - mapSize) / 2).Floor();
+
+		CreateFloor(mapSize);
 
         for (int y = 0; y < map.Length; y++)
         {
@@ -81,7 +87,17 @@ public static double totalTime = 0;
                 {
                     CreateExit(pos);
                 }
+				else if (c == 'L')
+                {
+                    CreateLantern(pos);
+                }
             }
+        }
+
+		// Fases que têm uma lanterna (letra L no mapa) começam escuras
+        if (map.Any(row => row.Contains('L')))
+        {
+            SetupDarkness();
         }
 
         var layer = new CanvasLayer();
@@ -313,6 +329,109 @@ public static double totalTime = 0;
         };
 
         AddChild(area);
+    }
+
+	    // Textura do círculo de luz: centro claro, borda que vai escurecendo
+    GradientTexture2D MakeLightTexture()
+    {
+        var grad = new Gradient();
+        grad.Offsets = new float[] { 0f, 0.55f, 1f };
+        grad.Colors = new Color[] { Colors.White, Colors.White, Colors.Black };
+
+        return new GradientTexture2D
+        {
+            Gradient = grad,
+            Fill = GradientTexture2D.FillEnum.Radial,
+            FillFrom = new Vector2(0.5f, 0.5f),
+            FillTo = new Vector2(1f, 0.5f),
+            Width = 256,
+            Height = 256
+        };
+    }
+
+    void SetupDarkness()
+    {
+        // Escurece tudo, menos a interface (que fica em outra camada)
+        darkness = new CanvasModulate { Color = new Color(0.02f, 0.02f, 0.05f) };
+        AddChild(darkness);
+
+        // Círculo de luz que acompanha o jogador
+        playerLight = new PointLight2D
+        {
+            Texture = MakeLightTexture(),
+            TextureScale = LightRadius / 128f,
+            Energy = 1f
+        };
+        GetNode<Node2D>("../Player").AddChild(playerLight);
+    }
+
+    void CreateLantern(Vector2 pos)
+    {
+        var area = new Area2D { Position = pos };
+
+        area.AddChild(new CollisionShape2D
+        {
+            Shape = new CircleShape2D { Radius = 14 }
+        });
+
+        area.AddChild(new ColorRect
+        {
+            Size = new Vector2(18, 26),
+            Position = new Vector2(-9, -13),
+            Color = new Color(1f, 0.6f, 0.15f)
+        });
+
+        // Brilho para dar para ver a lanterna um pouco de longe no escuro
+        area.AddChild(new PointLight2D
+        {
+            Texture = MakeLightTexture(),
+            TextureScale = (Tile * 1.2f) / 128f,
+            Color = new Color(1f, 0.8f, 0.4f)
+        });
+
+        area.BodyEntered += (body) =>
+        {
+            if (body is Player)
+            {
+                area.QueueFree();
+                RevealMap();
+            }
+        };
+
+        AddChild(area);
+    }
+
+    void RevealMap()
+    {
+        msg.Text = "Você pegou a lanterna! O labirinto está iluminado.";
+
+        // Clareia o mapa aos poucos e apaga o círculo
+        var tween = CreateTween();
+        tween.SetParallel(true);
+        tween.TweenProperty(darkness, "color", Colors.White, 1.2);
+        tween.TweenProperty(playerLight, "energy", 0.0, 1.2);
+    }
+
+	    void CreateFloor(Vector2 mapSize)
+    {
+        // "Vazio" ao redor do mapa (substitui o cinza do fundo)
+        AddChild(new ColorRect
+        {
+            Position = new Vector2(-4000, -4000),
+            Size = new Vector2(8000, 8000),
+            Color = new Color(0.12f, 0.14f, 0.20f),
+            ZIndex = -2,
+            MouseFilter = Control.MouseFilterEnum.Ignore
+        });
+
+        // Chão do labirinto
+        AddChild(new ColorRect
+        {
+            Size = mapSize,
+            Color = new Color(0.50f, 0.51f, 0.56f),
+            ZIndex = -1,
+            MouseFilter = Control.MouseFilterEnum.Ignore
+        });
     }
 
     void UpdateLabel()
