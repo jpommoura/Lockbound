@@ -37,7 +37,7 @@ public static double totalTime = 0;
 
 	CanvasModulate darkness;
     PointLight2D playerLight;
-    const float LightRadius = Tile * 2f;   // alcance do círculo de visão
+    const float LightRadius = Tile * 1.8f;   // alcance do círculo de visão
 
     public override void _Ready()
     {
