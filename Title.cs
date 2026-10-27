@@ -54,7 +54,7 @@ public partial class Title : Control
             // Começa sempre da fase 1, com o tempo zerado
             Maze.level = 1;
             Maze.totalTime = 0;
-            GetTree().ChangeSceneToFile("res://Main.tscn");
+            GetTree().ChangeSceneToFile("res://LevelSelect.tscn");
         }
     }
 }

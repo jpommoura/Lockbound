@@ -144,21 +144,10 @@ public static double totalTime = 0;
             {
                 GetTree().ReloadCurrentScene();
             }
-            else if (finished && (key.Keycode == Key.Enter || key.Keycode == Key.KpEnter))
-            {
-                if (level < totalLevels)
-                {
-                    totalTime += elapsed;
-                    level++;
-                }
-                else
-                {
-                    level = 1;
-                    totalTime = 0;
-                }
-
-                GetTree().ReloadCurrentScene();
-            }
+			else if (finished && (key.Keycode == Key.Enter || key.Keycode == Key.KpEnter))
+			{
+				GetTree().ChangeSceneToFile("res://LevelSelect.tscn");
+			}
         }
     }
 
@@ -313,16 +302,13 @@ public static double totalTime = 0;
             {
                 finished = true;
 
-                if (level < totalLevels)
-                {
-                    msg.Text = $"Fase {level} completa em {FormatTime(elapsed)}! ENTER: próxima fase";
-                }
-                else
-                {
-                    msg.Text = $"Você terminou o jogo! Tempo total: {FormatTime(totalTime + elapsed)}. ENTER: jogar de novo";
-                }
+				bool record = Progress.Complete(level, elapsed, totalLevels);
 
-                player.SetPhysicsProcess(false);
+				msg.Text = $"Fase {level} completa em {FormatTime(elapsed)}!"
+					+ (record ? " Novo recorde!" : "")
+					+ " ENTER: voltar ao mapa";
+
+				player.SetPhysicsProcess(false);
             }
         };
 

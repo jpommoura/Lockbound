@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://raj1sjpmi06i"]
+
+[ext_resource type="Script" uid="uid://muf6xa5jki5f" path="res://LevelSelect.cs" id="1_sf6f5"]
+
+[node name="LevelSelect" type="Control" unique_id=241121512]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("1_sf6f5")

@@ -43,6 +43,12 @@ public partial class PauseMenu : CanvasLayer
             GetTree().ReloadCurrentScene();
         });
 
+        AddButton(box, "Mapa de fases", () =>
+        {
+            CloseMenu();
+            GetTree().ChangeSceneToFile("res://LevelSelect.tscn");
+        });
+
         AddButton(box, "Menu principal", () =>
         {
             CloseMenu();
