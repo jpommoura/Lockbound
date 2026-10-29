@@ -127,12 +127,37 @@ public partial class LevelSelect : Control
         return $"{min:00}:{sec:00.0}";
     }
 
-    void Move(int delta)
+    // Move a seleção para a bolinha que está na direção apertada (na tela)
+    void MoveDir(Vector2 dir)
     {
-        if (total == 0) return;
-        selected = Mathf.Clamp(selected + delta, 1, total);
-        info = "";
-        QueueRedraw();
+        if (total == 0 || pos == null) return;
+
+        int best = selected;
+        float bestScore = float.MaxValue;
+
+        for (int i = 1; i <= total; i++)
+        {
+            if (i == selected) continue;
+
+            Vector2 d = pos[i] - pos[selected];
+            float len = d.Length();
+            float align = d.Dot(dir) / len;      // 1 = bem na direção, 0 = de lado
+            if (align < 0.5f) continue;          // ignora o que não está nessa direção
+
+            float score = len * (2f - align);    // prefere o mais perto e mais alinhado
+            if (score < bestScore)
+            {
+                bestScore = score;
+                best = i;
+            }
+        }
+
+        if (best != selected)
+        {
+            selected = best;
+            info = "";
+            QueueRedraw();
+        }
     }
 
     void TryPlay()
@@ -159,16 +184,22 @@ public partial class LevelSelect : Control
             {
                 case Key.Left:
                 case Key.A:
-                case Key.Up:
-                case Key.W:
-                    Move(-1);
+                    MoveDir(Vector2.Left);
                     break;
 
                 case Key.Right:
                 case Key.D:
+                    MoveDir(Vector2.Right);
+                    break;
+
+                case Key.Up:
+                case Key.W:
+                    MoveDir(Vector2.Up);
+                    break;
+
                 case Key.Down:
                 case Key.S:
-                    Move(1);
+                    MoveDir(Vector2.Down);
                     break;
 
                 case Key.Enter:

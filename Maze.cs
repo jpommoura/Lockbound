@@ -7,9 +7,15 @@ public partial class Maze : Node2D
     const int Tile = 48;
 
     // static: sobrevivem quando a cena reinicia (tecla R ou próxima fase)
-public static int level = 1;
-public static double totalTime = 0;
-    string[] map;
+    public static int level = 1;
+    public static double totalTime = 0;
+
+    // Cada fase tem 1 ou mais andares (separados por "---" no arquivo do mapa)
+    List<string[]> floors;
+    int currentFloor = 0;
+    Node2D floorNode;                                   // tudo do andar atual fica aqui dentro
+    HashSet<(int f, int x, int y)> taken = new();       // chaves/portas/lanterna já usadas
+    bool changingFloor = false;
     int totalLevels = 0;
 
     Dictionary<char, Color> keyColors = new()
@@ -31,11 +37,12 @@ public static double totalTime = 0;
     Label label;
     Label msg;
     Label timerLabel;
+    Label hint;
 
     double elapsed = 0;
     bool finished = false;
 
-	CanvasModulate darkness;
+    CanvasModulate darkness;
     PointLight2D playerLight;
     const float LightRadius = Tile * 1.8f;   // alcance do círculo de visão
 
@@ -47,55 +54,14 @@ public static double totalTime = 0;
             totalLevels++;
         }
 
-        map = LoadMap(level);
-        if (map == null) return;
+        floors = LoadFloors(level);
+        if (floors == null) return;
 
-		int cols = map.Max(l => l.Length);
-		var mapSize = new Vector2(cols * Tile, map.Length * Tile);
-		Position = ((GetViewportRect().Size - mapSize) / 2).Floor();
+        // Total de chaves da fase (somando todos os andares)
+        totalKeys = floors.Sum(fl => fl.Sum(row => row.Count(c => keyColors.ContainsKey(c))));
 
-		CreateFloor(mapSize);
-
-        for (int y = 0; y < map.Length; y++)
-        {
-            for (int x = 0; x < map[y].Length; x++)
-            {
-                char c = map[y][x];
-                var pos = new Vector2(x * Tile + Tile / 2, y * Tile + Tile / 2);
-
-                if (c == '#')
-                {
-                    CreateWall(pos);
-                }
-                else if (c == 'P')
-                {
-					GetNode<Node2D>("../Player").GlobalPosition = ToGlobal(pos);                }
-                else if (keyColors.ContainsKey(c))
-                {
-                    CreateKey(pos, c);
-                    totalKeys++;
-                }
-                else if (c == 'Y' || c == 'R' || c == 'B')
-                {
-                    CreateDoor(pos, char.ToLower(c));
-                }
-                else if (c == 'D')
-                {
-                    CreateDoor(pos, 'd');
-                }
-                else if (c == 'S')
-                {
-                    CreateExit(pos);
-                }
-				else if (c == 'L')
-                {
-                    CreateLantern(pos);
-                }
-            }
-        }
-
-		// Fases que têm uma lanterna (letra L no mapa) começam escuras
-        if (map.Any(row => row.Contains('L')))
+        // Fases que têm uma lanterna (letra L em algum andar) começam escuras
+        if (floors.Any(fl => fl.Any(row => row.Contains('L'))))
         {
             SetupDarkness();
         }
@@ -114,20 +80,19 @@ public static double totalTime = 0;
         timerLabel.AddThemeFontSizeOverride("font_size", 24);
         layer.AddChild(timerLabel);
 
-        var hint = new Label
-        {
-            Position = new Vector2(980, 45),
-            Text = $"Fase {level}/{totalLevels}\nR: reiniciar"
-        };
+        hint = new Label { Position = new Vector2(980, 45) };
         hint.AddThemeFontSizeOverride("font_size", 20);
         layer.AddChild(hint);
 
         AddChild(layer);
-		AddChild(new PauseMenu());
+        AddChild(new PauseMenu());
+
+        BuildFloor(0, -1);
         UpdateLabel();
     }
 
-    string[] LoadMap(int n)
+    // Lê o arquivo da fase. Andares são separados por uma linha com "---"
+    List<string[]> LoadFloors(int n)
     {
         using var file = Godot.FileAccess.Open($"res://maps/fase{n}.txt", Godot.FileAccess.ModeFlags.Read);
 
@@ -137,15 +102,153 @@ public static double totalTime = 0;
             return null;
         }
 
-        return file.GetAsText()
-            .Split('\n')
-            .Select(l => l.TrimEnd('\r'))
-            .Where(l => l.Length > 0)
-            .ToArray();
+        var result = new List<string[]>();
+        var current = new List<string>();
+
+        foreach (var raw in file.GetAsText().Split('\n'))
+        {
+            var line = raw.TrimEnd('\r');
+
+            if (line.Trim() == "---")
+            {
+                if (current.Count > 0) result.Add(current.ToArray());
+                current = new List<string>();
+            }
+            else if (line.Length > 0)
+            {
+                current.Add(line);
+            }
+        }
+
+        if (current.Count > 0) result.Add(current.ToArray());
+
+        return result.Count == 0 ? null : result;
+    }
+
+    // Monta um andar. fromFloor = andar de onde o jogador veio (-1 = início da fase)
+    void BuildFloor(int f, int fromFloor)
+    {
+        currentFloor = f;
+        var map = floors[f];
+
+        // Remove o andar anterior
+        if (floorNode != null)
+        {
+            RemoveChild(floorNode);
+            floorNode.QueueFree();
+        }
+        floorNode = new Node2D();
+        AddChild(floorNode);
+
+        // Centraliza este andar na tela
+        int cols = map.Max(l => l.Length);
+        var mapSize = new Vector2(cols * Tile, map.Length * Tile);
+        Position = ((GetViewportRect().Size - mapSize) / 2).Floor();
+
+        CreateFloor(map);
+
+        Vector2? spawn = null;
+
+        for (int y = 0; y < map.Length; y++)
+        {
+            for (int x = 0; x < map[y].Length; x++)
+            {
+                char c = map[y][x];
+                var pos = new Vector2(x * Tile + Tile / 2, y * Tile + Tile / 2);
+
+                if (c == '#')
+                {
+                    CreateWall(pos, x, y);
+                }
+                else if (c == 'P')
+                {
+                    if (fromFloor < 0) spawn = pos;
+                }
+                else if (keyColors.ContainsKey(c))
+                {
+                    if (!taken.Contains((f, x, y))) CreateKey(pos, c, f, x, y);
+                }
+                else if (c == 'Y' || c == 'R' || c == 'B')
+                {
+                    if (!taken.Contains((f, x, y))) CreateDoor(pos, char.ToLower(c), f, x, y);
+                }
+                else if (c == 'D')
+                {
+                    if (!taken.Contains((f, x, y))) CreateDoor(pos, 'd', f, x, y);
+                }
+                else if (c == 'S')
+                {
+                    CreateExit(pos);
+                }
+                else if (c == 'L')
+                {
+                    if (!taken.Contains((f, x, y))) CreateLantern(pos, f, x, y);
+                }
+                else if (c == '>' || c == '<')
+                {
+                    CreateStairs(pos, c, f);
+
+                    // Chegou de baixo (subiu) -> aparece ao lado da escada '<'
+                    // Chegou de cima (desceu) -> aparece ao lado da escada '>'
+                    if ((c == '<' && fromFloor == f - 1) || (c == '>' && fromFloor == f + 1))
+                    {
+                        spawn = pos + SpawnOffset(map, x, y);
+                    }
+                }
+            }
+        }
+
+        if (spawn.HasValue)
+        {
+            var player = GetNode<CharacterBody2D>("../Player");
+            player.GlobalPosition = ToGlobal(spawn.Value);
+            player.Velocity = Vector2.Zero;
+        }
+
+        changingFloor = false;
+        UpdateHint();
+    }
+
+    // Procura o quadrado livre ao lado da escada (onde o jogador vai aparecer)
+    Vector2 SpawnOffset(string[] map, int x, int y)
+    {
+        var dirs = new (int dx, int dy)[] { (0, -1), (0, 1), (-1, 0), (1, 0) };
+
+        foreach (var d in dirs)
+        {
+            int nx = x + d.dx, ny = y + d.dy;
+            if (ny < 0 || ny >= map.Length || nx < 0 || nx >= map[ny].Length) continue;
+            if (map[ny][nx] == ' ') return new Vector2(d.dx * Tile, d.dy * Tile);
+        }
+
+        return Vector2.Zero;
+    }
+
+    void ChangeFloor(int to, int from)
+    {
+        BuildFloor(to, from);
+    }
+
+    void UpdateHint()
+    {
+        hint.Text = HintText();
+    }
+
+    string HintText()
+    {
+        string floorText = floors.Count > 1 ? $"\nAndar {currentFloor + 1}/{floors.Count}" : "";
+        return $"Fase {level}/{totalLevels}{floorText}\n{GameControls.Label("restart")}: reiniciar";
     }
 
     public override void _Process(double delta)
     {
+        // Mantém o texto "tecla: reiniciar" certo se o jogador trocar a tecla no pause
+        if (hint != null)
+        {
+            string t = HintText();
+            if (hint.Text != t) hint.Text = t;
+        }
+
         if (finished || timerLabel == null) return;
 
         elapsed += delta;
@@ -156,14 +259,10 @@ public static double totalTime = 0;
     {
         if (@event is InputEventKey key && key.Pressed && !key.Echo)
         {
-            if (key.Keycode == Key.R)
+            if (GameControls.Matches("restart", key))
             {
                 GetTree().ReloadCurrentScene();
             }
-			else if (finished && (key.Keycode == Key.Enter || key.Keycode == Key.KpEnter))
-			{
-				GetTree().ChangeSceneToFile("res://LevelSelect.tscn");
-			}
         }
     }
 
@@ -186,7 +285,7 @@ public static double totalTime = 0;
     // número "aleatório" fixo por posição (a fase fica igual toda vez)
     int Hash(int x, int y) => Mathf.Abs(x * 73 + y * 151 + x * y * 7);
 
-    void CreateWall(Vector2 pos)
+    void CreateWall(Vector2 pos, int gx, int gy)
     {
         var body = new StaticBody2D { Position = pos };
 
@@ -195,14 +294,14 @@ public static double totalTime = 0;
             Shape = new RectangleShape2D { Size = new Vector2(Tile, Tile) }
         };
 
-        var visual = MakeSprite($"environment/wall_{Hash((int)(pos.X / Tile), (int)(pos.Y / Tile)) % 3 + 1}.png");
+        var visual = MakeSprite($"environment/wall_{Hash(gx, gy) % 3 + 1}.png");
 
         body.AddChild(shape);
         body.AddChild(visual);
-        AddChild(body);
+        floorNode.AddChild(body);
     }
 
-    void CreateKey(Vector2 pos, char type)
+    void CreateKey(Vector2 pos, char type, int f, int gx, int gy)
     {
         var area = new Area2D { Position = pos };
 
@@ -222,16 +321,17 @@ public static double totalTime = 0;
             if (body is Player)
             {
                 keys.Add(type);
+                taken.Add((f, gx, gy));
                 msg.Text = $"Chave {keyNames[type]} coletada!";
                 UpdateLabel();
                 area.QueueFree();
             }
         };
 
-        AddChild(area);
+        floorNode.AddChild(area);
     }
 
-    void CreateDoor(Vector2 pos, char type)
+    void CreateDoor(Vector2 pos, char type, int f, int gx, int gy)
     {
         bool isFinal = type == 'd';
 
@@ -247,7 +347,7 @@ public static double totalTime = 0;
 
         door.AddChild(shape);
         door.AddChild(visual);
-        AddChild(door);
+        floorNode.AddChild(door);
 
         // Sensor um pouco maior que a porta, para detectar o jogador chegando perto
         var sensor = new Area2D { Position = pos };
@@ -269,6 +369,7 @@ public static double totalTime = 0;
                 {
                     door.QueueFree();
                     opened = true;
+                    taken.Add((f, gx, gy));
                     msg.Text = "Porta final aberta!";
                 }
                 else
@@ -282,6 +383,7 @@ public static double totalTime = 0;
                 {
                     door.QueueFree();
                     opened = true;
+                    taken.Add((f, gx, gy));
                     msg.Text = "Porta aberta!";
                 }
                 else
@@ -291,7 +393,33 @@ public static double totalTime = 0;
             }
         };
 
-        AddChild(sensor);
+        floorNode.AddChild(sensor);
+    }
+
+    void CreateStairs(Vector2 pos, char type, int f)
+    {
+        var area = new Area2D { Position = pos };
+
+        area.AddChild(new CollisionShape2D
+        {
+            Shape = new RectangleShape2D { Size = new Vector2(26, 26) }
+        });
+
+        area.AddChild(MakeSprite(type == '>' ? "environment/stairs_up.png" : "environment/stairs_down.png"));
+
+        area.BodyEntered += (body) =>
+        {
+            if (body is not Player || changingFloor || finished) return;
+
+            changingFloor = true;
+            int to = type == '>' ? f + 1 : f - 1;
+            msg.Text = type == '>' ? $"Você subiu para o andar {to + 1}." : $"Você desceu para o andar {to + 1}.";
+
+            // Troca de andar fora do cálculo de colisões (senão o Godot reclama)
+            Callable.From(() => ChangeFloor(to, f)).CallDeferred();
+        };
+
+        floorNode.AddChild(area);
     }
 
     void CreateExit(Vector2 pos)
@@ -311,20 +439,22 @@ public static double totalTime = 0;
             {
                 finished = true;
 
-				bool record = Progress.Complete(level, elapsed, totalLevels);
+                bool record = Progress.Complete(level, elapsed, totalLevels);
 
-				msg.Text = $"Fase {level} completa em {FormatTime(elapsed)}!"
-					+ (record ? " Novo recorde!" : "")
-					+ " ENTER: voltar ao mapa";
+                msg.Text = "";
+                player.SetPhysicsProcess(false);
 
-				player.SetPhysicsProcess(false);
+                // Mostra o menu de fim de fase (adicionado fora do cálculo de colisões)
+                string info = $"Tempo: {FormatTime(elapsed)}" + (record ? "   Novo recorde!" : "");
+                bool hasNext = level < totalLevels;
+                Callable.From(() => AddChild(new FinishMenu { Info = info, HasNext = hasNext })).CallDeferred();
             }
         };
 
-        AddChild(area);
+        floorNode.AddChild(area);
     }
 
-	    // Textura do círculo de luz: centro claro, borda que vai escurecendo
+    // Textura do círculo de luz: centro claro, borda que vai escurecendo
     GradientTexture2D MakeLightTexture()
     {
         var grad = new Gradient();
@@ -358,7 +488,7 @@ public static double totalTime = 0;
         GetNode<Node2D>("../Player").AddChild(playerLight);
     }
 
-    void CreateLantern(Vector2 pos)
+    void CreateLantern(Vector2 pos, int f, int gx, int gy)
     {
         var area = new Area2D { Position = pos };
 
@@ -381,12 +511,13 @@ public static double totalTime = 0;
         {
             if (body is Player)
             {
+                taken.Add((f, gx, gy));
                 area.QueueFree();
                 RevealMap();
             }
         };
 
-        AddChild(area);
+        floorNode.AddChild(area);
     }
 
     void RevealMap()
@@ -400,10 +531,10 @@ public static double totalTime = 0;
         tween.TweenProperty(playerLight, "energy", 0.0, 1.2);
     }
 
-	    void CreateFloor(Vector2 mapSize)
+    void CreateFloor(string[] map)
     {
         // "Vazio" ao redor do mapa (substitui o cinza do fundo)
-        AddChild(new ColorRect
+        floorNode.AddChild(new ColorRect
         {
             Position = new Vector2(-4000, -4000),
             Size = new Vector2(8000, 8000),
@@ -421,7 +552,7 @@ public static double totalTime = 0;
                 var f = MakeSprite($"environment/floor_{(h == 0 ? 2 : h == 1 ? 3 : 1)}.png");
                 f.Position = new Vector2(x * Tile + Tile / 2, y * Tile + Tile / 2);
                 f.ZIndex = -1;
-                AddChild(f);
+                floorNode.AddChild(f);
             }
     }
 

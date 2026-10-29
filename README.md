@@ -26,7 +26,9 @@ A versão 3D em primeira pessoa fica para depois.
 
 ## Fases
 
-As fases são arquivos de texto em `maps/faseN.txt`. Basta criar `fase4.txt` que o jogo conta sozinho.
+As fases são arquivos de texto em `maps/faseN.txt`. Basta criar `fase13.txt` que o jogo conta sozinho.
+
+Uma fase pode ter vários andares: separe cada andar com uma linha contendo só `---`. A escada `>` de um andar liga com a `<` do andar de cima (uma de cada por andar).
 
 | Letra | Significa |
 |---|---|
@@ -36,6 +38,8 @@ As fases são arquivos de texto em `maps/faseN.txt`. Basta criar `fase4.txt` que
 | `Y` `R` `B` | Porta amarela / vermelha / azul |
 | `D` | Porta final (precisa das 3 chaves) |
 | `S` | Saída |
+| `>` | Escada para o próximo andar |
+| `<` | Escada para o andar de baixo |
 | `L` | Lanterna |
 | espaço | Chão |
 
@@ -65,7 +69,7 @@ Lockbound/
 
 - [ ] Trocar os retângulos por sprites (parede, chão, itens)
 - [ ] Sprite do personagem com 4 direções
-- [ ] Mais fases
+- [x] 12 fases (até 3 andares)
 - [ ] Música e efeitos sonoros
 - [ ] Moedas/XP, bônus de tempo, bússola
 - [ ] Skins de personagem
