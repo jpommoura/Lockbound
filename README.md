@@ -115,6 +115,8 @@ Mais 3 mundos secretos (ideias: Doces, Céu, Espelhos). Mecânicas possíveis po
 - [x] 12 fases (até 3 andares, com escadas)
 - [x] Menu de pausa, controles configuráveis, menu de fim de fase
 - [x] Tela inicial dinâmica (dia/noite)
+- [ ] Ações completas com texto no meio da tela
+- [ ] Funcionalidades que 
 - [ ] Panorama da tela inicial refeito com arte melhor (em andamento)
 - [ ] Sistema de mundos (pastas `maps/mundoN`, temas e skins)
 - [ ] Música e efeitos sonoros

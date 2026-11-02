@@ -36,6 +36,8 @@ public partial class Maze : Node2D
     int totalKeys = 0;
     Label label;
     Label msg;
+    double msgTimer = 0;     // quanto tempo a mensagem ainda fica na tela
+    string lastMsg = "";
     Label timerLabel;
     Label hint;
 
@@ -71,8 +73,14 @@ public partial class Maze : Node2D
         label = new Label { Position = new Vector2(10, 10) };
         label.AddThemeFontSizeOverride("font_size", 24);
         layer.AddChild(label);
-
-        msg = new Label { Position = new Vector2(10, 45) };
+        msg = new Label { HorizontalAlignment = HorizontalAlignment.Center, MouseFilter = Control.MouseFilterEnum.Ignore };
+        msg.AddThemeFontSizeOverride("font_size", 28);
+        msg.AddThemeColorOverride("font_outline_color", Colors.Black);
+        msg.AddThemeConstantOverride("outline_size", 8);
+        layer.AddChild(msg);
+        msg.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.BottomWide);
+        msg.OffsetTop = -170;      // altura na tela: mais negativo = mais alto
+        msg.OffsetBottom = -120;
         msg.AddThemeFontSizeOverride("font_size", 24);
         layer.AddChild(msg);
 
@@ -247,6 +255,27 @@ public partial class Maze : Node2D
         {
             string t = HintText();
             if (hint.Text != t) hint.Text = t;
+        }
+
+                // Mensagem: aparece, fica ~2,5 s e some devagar
+        if (msg != null)
+        {
+            if (msg.Text != lastMsg)
+            {
+                lastMsg = msg.Text;
+                msgTimer = 2.5;
+            }
+
+            if (msgTimer > 0)
+            {
+                msgTimer -= delta;
+                msg.Modulate = new Color(1, 1, 1, Mathf.Clamp((float)msgTimer / 0.5f, 0f, 1f));
+                if (msgTimer <= 0)
+                {
+                    msg.Text = "";
+                    lastMsg = "";
+                }
+            }
         }
 
         if (finished || timerLabel == null) return;
